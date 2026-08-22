@@ -50,49 +50,159 @@ Answer:
 
 st.set_page_config(page_title="PDF Q&A Chatbot", page_icon="📄", layout="wide")
 
-# ---------------- Custom theme: pink/black main area, red/black sidebar ----------------
+# ---------------- Theme: "Ink & Highlighter" ----------------
+# Deep ink-navy surfaces with a warm amber "highlighter" accent, like
+# annotating a PDF at night. Covers Streamlit's header/footer chrome too,
+# not just the content area, so there's no leftover default-black strip.
 st.markdown(
     """
     <style>
-    /* Main content area: pink + black gradient */
-    [data-testid="stAppViewContainer"] {
-        background: linear-gradient(160deg, #1a0010 0%, #3d0021 45%, #1a0010 100%);
-        color: #ffe6f2;
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap');
+
+    :root {
+        --ink-0: #0B0E14;
+        --ink-1: #10141D;
+        --ink-2: #171C28;
+        --panel: #1B2130;
+        --border: #2A3142;
+        --amber: #F2A73B;
+        --amber-dim: #8A5F1F;
+        --text: #E9E6DD;
+        --text-muted: #8D93A3;
     }
 
-    /* Sidebar: red + black gradient */
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Kill Streamlit's default red/orange top decoration line */
+    [data-testid="stDecoration"] {
+        background-image: linear-gradient(90deg, var(--amber), var(--ink-2));
+    }
+
+    /* Top toolbar (Deploy / menu bar) */
+    [data-testid="stHeader"] {
+        background-color: var(--ink-0);
+        border-bottom: 1px solid var(--border);
+    }
+    [data-testid="stHeader"] * {
+        color: var(--text) !important;
+    }
+
+    /* Main content area */
+    [data-testid="stAppViewContainer"] {
+        background: var(--ink-1);
+        color: var(--text);
+    }
+    [data-testid="stMain"] {
+        background: var(--ink-1);
+    }
+
+    /* Sidebar */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a0000 0%, #3d0000 50%, #1a0000 100%);
-        color: #ffe0e0;
+        background: var(--ink-0);
+        border-right: 1px solid var(--border);
     }
     [data-testid="stSidebar"] * {
-        color: #ffe0e0 !important;
+        color: var(--text) !important;
+    }
+    [data-testid="stSidebar"] h2 {
+        font-family: 'Space Grotesk', sans-serif;
+        letter-spacing: 0.02em;
     }
 
-    /* Headings and captions in the main area */
-    h1, h2, h3, [data-testid="stCaptionContainer"] {
-        color: #ff4fa3 !important;
+    /* Bottom chat-input bar (was showing as a plain black strip) */
+    [data-testid="stBottom"] > div {
+        background: var(--ink-0);
+        border-top: 1px solid var(--border);
+    }
+    [data-testid="stChatInput"] {
+        background-color: var(--ink-2) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 10px !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        color: var(--text) !important;
     }
 
-    /* Buttons: pink/red accent */
+    /* Titles */
+    h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        color: var(--text) !important;
+        border-bottom: 3px solid var(--amber);
+        display: inline-block;
+        padding-bottom: 6px;
+    }
+    h2, h3 {
+        font-family: 'Space Grotesk', sans-serif;
+        color: var(--text) !important;
+    }
+    [data-testid="stCaptionContainer"] {
+        color: var(--text-muted) !important;
+    }
+
+    /* Buttons */
     .stButton > button {
-        background-color: #ff2d78;
-        color: white;
-        border: 1px solid #ff2d78;
+        background-color: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--border);
         border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.15s ease;
     }
     .stButton > button:hover {
-        background-color: #b3003c;
-        border: 1px solid #b3003c;
-        color: white;
+        border-color: var(--amber);
+        color: var(--amber);
+    }
+    /* Primary "Process PDF(s)" button gets the highlighter treatment */
+    .stButton > button[kind="primary"] {
+        background-color: var(--amber);
+        border: 1px solid var(--amber);
+        color: #241505;
+        font-weight: 600;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background-color: #ffbf5c;
+        border-color: #ffbf5c;
+        color: #241505;
     }
 
-    /* Chat input and expanders */
-    [data-testid="stChatInput"] {
-        background-color: #2a0015;
+    /* File uploader, expanders, sliders */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: var(--panel) !important;
+        border: 1px dashed var(--border) !important;
+        border-radius: 10px;
     }
-    .streamlit-expanderHeader {
-        color: #ff4fa3 !important;
+    .streamlit-expanderHeader, [data-testid="stExpander"] summary {
+        background-color: var(--panel) !important;
+        color: var(--text) !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stSlider"] [role="slider"] {
+        background-color: var(--amber) !important;
+    }
+
+    /* Status boxes (success / info / warning) */
+    [data-testid="stAlertContentSuccess"] { color: #C8E6A0 !important; }
+    [data-testid="stAlertContentInfo"] { color: #A9C4E8 !important; }
+    [data-testid="stAlertContentWarning"] { color: #F2D08A !important; }
+    div[data-baseweb="notification"] {
+        background-color: var(--panel) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 8px !important;
+    }
+
+    /* Chat bubbles: assistant = highlighted margin note, user = plain ink card */
+    [data-testid="stChatMessage"] {
+        background-color: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 4px 6px;
+        margin-bottom: 10px;
+    }
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+        border-left: 3px solid var(--amber);
     }
     </style>
     """,
