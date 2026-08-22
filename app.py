@@ -1,23 +1,22 @@
 """
 Streamlit frontend for the PDF RAG project.
 
-Ye app tumhare do scripts (PRoject_database.py + project.py) ka logic
-ek hi jagah combine karta hai:
-  1) Sidebar se PDF(s) upload karo
-  2) "Process PDF(s)" dabao -> load -> split -> embed -> Chroma me store
-  3) Neeche chat box me sawal poocho -> retriever context nikalega ->
-     ChatMistralAI answer dega
+This app combines the two original scripts (PRoject_database.py + project.py)
+into a single UI:
+  1) Upload PDF(s) from the sidebar
+  2) Click "Process PDF(s)" -> load -> split -> embed -> store in Chroma
+  3) Ask questions in the chat box below -> the retriever pulls relevant
+     context -> ChatMistralAI generates the answer
 
-Run karne ke liye:
+To run:
     streamlit run app.py
 
-.env file me MISTRAL_API_KEY (aur langchain init_embeddings ke liye
-zaroori keys) already set honi chahiye, jaisa tumhare original scripts
-me tha.
+Your .env file must already have MISTRAL_API_KEY (and any other keys
+required by langchain's init_embeddings), just like in the original
+scripts.
 """
 
 import os
-import shutil
 import tempfile
 
 import streamlit as st
@@ -31,8 +30,6 @@ from langchain.embeddings import init_embeddings
 from langchain_community.vectorstores import Chroma
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
-
-PERSIST_DIR = "chroma_db"
 
 PROMPT = ChatPromptTemplate.from_template(
     """
@@ -53,6 +50,55 @@ Answer:
 
 st.set_page_config(page_title="PDF Q&A Chatbot", page_icon="📄", layout="wide")
 
+# ---------------- Custom theme: pink/black main area, red/black sidebar ----------------
+st.markdown(
+    """
+    <style>
+    /* Main content area: pink + black gradient */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(160deg, #1a0010 0%, #3d0021 45%, #1a0010 100%);
+        color: #ffe6f2;
+    }
+
+    /* Sidebar: red + black gradient */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a0000 0%, #3d0000 50%, #1a0000 100%);
+        color: #ffe0e0;
+    }
+    [data-testid="stSidebar"] * {
+        color: #ffe0e0 !important;
+    }
+
+    /* Headings and captions in the main area */
+    h1, h2, h3, [data-testid="stCaptionContainer"] {
+        color: #ff4fa3 !important;
+    }
+
+    /* Buttons: pink/red accent */
+    .stButton > button {
+        background-color: #ff2d78;
+        color: white;
+        border: 1px solid #ff2d78;
+        border-radius: 8px;
+    }
+    .stButton > button:hover {
+        background-color: #b3003c;
+        border: 1px solid #b3003c;
+        color: white;
+    }
+
+    /* Chat input and expanders */
+    [data-testid="stChatInput"] {
+        background-color: #2a0015;
+    }
+    .streamlit-expanderHeader {
+        color: #ff4fa3 !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # ---------------- Cached resources ----------------
 @st.cache_resource(show_spinner=False)
@@ -66,11 +112,13 @@ def get_llm():
 
 
 # ---------------- Core RAG helpers ----------------
-def build_vector_store(uploaded_files, chunk_size, chunk_overlap, clear_old):
-    """PRoject_database.py ka logic: load -> split -> embed -> store."""
-    if clear_old and os.path.exists(PERSIST_DIR):
-        shutil.rmtree(PERSIST_DIR)
+def build_vector_store(uploaded_files, chunk_size, chunk_overlap):
+    """Logic from PRoject_database.py: load -> split -> embed -> store.
 
+    NOTE: This vector store only lives in memory (RAM) and is never
+    saved to disk. As soon as the session/app restarts (or the "Clear"
+    button is clicked), this data disappears automatically.
+    """
     all_docs = []
     for uploaded_file in uploaded_files:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -92,20 +140,13 @@ def build_vector_store(uploaded_files, chunk_size, chunk_overlap, clear_old):
     )
     chunks = splitter.split_documents(all_docs)
 
+    # persist_directory intentionally omitted -> this Chroma collection
+    # stays only in this process's memory, nothing is saved to disk.
     vector_store = Chroma.from_documents(
         documents=chunks,
         embedding=get_embeddings(),
-        persist_directory=PERSIST_DIR,
     )
     return vector_store, len(chunks)
-
-
-def load_existing_vector_store():
-    """project.py ka logic: disk se already-bani DB load karna."""
-    return Chroma(
-        persist_directory=PERSIST_DIR,
-        embedding_function=get_embeddings(),
-    )
 
 
 def answer_question(vector_store, question, k):
@@ -128,70 +169,68 @@ with st.sidebar:
     st.header("📄 PDF Setup")
 
     uploaded_files = st.file_uploader(
-        "PDF upload karo", type=["pdf"], accept_multiple_files=True
+        "Upload PDF(s)", type=["pdf"], accept_multiple_files=True
     )
 
     with st.expander("Chunking settings"):
         chunk_size = st.number_input("Chunk size", value=1500, min_value=200, step=100)
         chunk_overlap = st.number_input("Chunk overlap", value=500, min_value=0, step=50)
-        clear_old = st.checkbox("Process se pehle purani DB clear karo", value=True)
 
     if st.button("🚀 Process PDF(s)", type="primary", use_container_width=True):
         if not uploaded_files:
-            st.warning("Pehle kam se kam ek PDF upload karo.")
+            st.warning("Please upload at least one PDF first.")
         else:
-            with st.spinner("PDF padh raha hu, chunks bana raha hu, embeddings generate ho rahi hain..."):
+            with st.spinner("Reading PDF, creating chunks, generating embeddings..."):
                 vector_store, num_chunks = build_vector_store(
-                    uploaded_files, chunk_size, chunk_overlap, clear_old
+                    uploaded_files, chunk_size, chunk_overlap
                 )
                 st.session_state.vector_store = vector_store
-            st.success(f"Vector DB taiyar ✅ ({num_chunks} chunks)")
+            st.success(f"Vector DB ready ✅ ({num_chunks} chunks) — only for this session, nothing is saved anywhere.")
 
     st.divider()
 
-    if st.button("📂 Load existing Vector DB", use_container_width=True):
-        if os.path.exists(PERSIST_DIR):
-            st.session_state.vector_store = load_existing_vector_store()
-            st.success("Purani chroma_db load ho gayi ✅")
-        else:
-            st.error("chroma_db folder abhi tak nahi bana. Pehle ek PDF process karo.")
+    if st.button("🗑️ Delete my data now", use_container_width=True):
+        st.session_state.vector_store = None
+        st.session_state.messages = []
+        st.success("Vector DB and chat history deleted.")
+        st.rerun()
 
     st.divider()
-    k = st.slider("Retrieve karne wale chunks (k)", min_value=1, max_value=10, value=3)
+    k = st.slider("Number of chunks to retrieve (k)", min_value=1, max_value=10, value=3)
 
     if st.session_state.vector_store is not None:
         st.success("Status: Vector DB ready")
     else:
-        st.info("Status: Koi vector DB load nahi hai")
+        st.info("Status: No vector DB loaded")
 
-    if st.button("🗑️ Chat history clear karo", use_container_width=True):
+    if st.button("🗑️ Clear chat history", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
 
 # ---------------- Main chat area ----------------
-st.title("📄 Apne PDF se chat karo")
-st.caption("Sidebar se PDF upload karke process karo, phir neeche sawal poocho.")
+st.title("📄 Chat with your PDF")
+st.caption("Upload a PDF from the sidebar, process it, then ask questions below.")
 
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-question = st.chat_input("Apna sawal yahan likho...")
+question = st.chat_input("Type your question here...")
 
 if question:
     if st.session_state.vector_store is None:
-        st.warning("Pehle sidebar se PDF upload karke process karo.")
+        st.warning("Please upload and process a PDF from the sidebar first.")
     else:
         st.session_state.messages.append({"role": "user", "content": question})
         with st.chat_message("user"):
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Soch raha hu..."):
+            with st.spinner("Thinking..."):
                 answer, docs = answer_question(st.session_state.vector_store, question, k)
                 st.markdown(answer)
-                with st.expander("Source chunks dekho"):
+                with st.expander("View source chunks"):
                     for i, d in enumerate(docs, start=1):
                         page = d.metadata.get("page", "?")
                         src = d.metadata.get("source_file", "")
